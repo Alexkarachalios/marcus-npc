@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Marcus — The Fixer</title>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg:#080c0a;
+  --surface:#0d120f;
+  --card:#111a13;
+  --border:#1a2a1e;
+  --border2:#243228;
+  --accent:#39ff7a;
+  --accent-dim:#1a7a3a;
+  --accent-glow:rgba(57,255,122,0.15);
+  --text:#d4e8d8;
+  --muted:#4a6650;
+  --muted2:#1e2e22;
+  --gold:#d4a843;
+  --danger:#e85555;
+  --fog:rgba(57,255,122,0.03);
+  --font-head:'Bebas Neue',cursive;
+  --font-mono:'Space Mono',monospace;
+}
+*{box-sizing:border-box;margin:0;padding:0;}
+
+body {
+  background:var(--bg);
+  color:var(--text);
+  font-family:var(--font-mono);
+  font-size:13px;
+  min-height:100vh;
+  display:flex;
+  flex-direction:column;
+  overflow:hidden;
+  cursor:default;
+}
+
+/* ── Scanline overlay ── */
+body::before {
+  content:'';
+  position:fixed;
+  inset:0;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,0,0,0.07) 2px,rgba(0,0,0,0.07) 4px);
+  pointer-events:none;
+  z-index:100;
+}
+
+/* ── City skyline background ── */
+#skyline {
+  position:fixed;
+  bottom:0; left:0; right:0;
+  height:220px;
+  pointer-events:none;
+  z-index:0;
+}
+
+/* ── Rain canvas ── */
+#rain {
+  position:fixed;
+  inset:0;
+  pointer-events:none;
+  z-index:1;
+  opacity:0.35;
+}
+
+/* ── Main layout ── */
+#app {
+  position:relative;
+  z-index:2;
+  display:flex;
+  flex-direction:column;
+  height:100vh;
+}
+
+/* ── Header ── */
+header {
+  display:flex;
+  align-items:center;
+  gap:0;
+  border-bottom:1px solid var(--border);
+  background:rgba(8,12,10,0.95);
+  backdrop-filter:blur(8px);
+  flex-shrink:0;
+}
+
+.header-portrait {
+  width:90px;
+  height:90px;
+  flex-shrink:0;
+  position:relative;
+  border-right:1px solid var(--border);
+  overflow:hidden;
+}
+
+canvas#portrait {
+  width:90px;
+  height:90px;
+  image-rendering:pixelated;
+}
+
+.portrait-scan {
+  position:absolute;
+  inset:0;
+  background:linear-gradient(to bottom, transparent 40%, rgba(57,255,122,0.08) 100%);
+  animation:scan 3s linear infinite;
+}
+@keyframes scan {
+  0%{background-position:0 -100px}
+  100%{background-position:0 200px}
+}
+
+.header-info {
+  flex:1;
+  padding:14px 20px;
+}
+
+.npc-codename {
+  font-family:var(--font-head);
+  font-size:36px;
+  letter-spacing:0.08em;
+  color:var(--accent);
+  line-height:1;
+  text-shadow:0 0 20px rgba(57,255,122,0.4);
+}
+
+.npc-subtitle {
+  font-size:10px;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:0.15em;
+  margin-top:4px;
+}
+
+.header-stats {
+  display:flex;
+  flex-direction:column;
+  align-items:flex-end;
+  gap:6px;
+  padding:14px 20px;
+  border-left:1px solid var(--border);
+}
+
+.rep-label {
+  font-size:9px;
+  color:var(--muted);
+  text-transform:uppercase;
+  letter-spacing:0.12em;
+}
+
+.rep-value {
+  font-family:var(--font-head);
+  font-size:20px;
+  letter-spacing:0.06em;
+  color:var(--accent);
+  transition:color 0.4s,text-shadow 0.4s;
+}
+.rep-value.hostile { color:var(--danger); text-shadow:0 0 10px rgba(232,85,85,0.5); }
+.rep-value.ally    { color:var(--gold);   text-shadow:0 0 10px rgba(212,168,67,0.5); }
+
+.status-dot {
+  width:8px; height:8px;
+  border-radius:50%;
+  background:var(--accent);
+  box-shadow:0 0 8px var(--accent);
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse {
+  0%,100%{opacity:1;transform:scale(1)}
+  50%{opacity:0.5;transform:scale(0.8)}
+}
+
+/* ── Quick actions ── */
+#quick-bar {
+  display:flex;
+  gap:6px;
+  padding:8px 16px;
+  border-bottom:1px solid var(--border);
+  background:rgba(8,12,10,0.9);
+  flex-wrap:wrap;
+  flex-shrink:0;
+}
+
+.qbtn {
+  background:transparent;
+  border:1px solid var(--border2);
+  border-radius:2px;
+  color:var(--muted);
+  font-family:var(--font-mono);
+  font-size:10px;
+  padding:5px 12px;
+  cursor:pointer;
+  transition:all 0.15s;
+  letter-spacing:0.06em;
+  text-transform:uppercase;
+  position:relative;
+  overflow:hidden;
+}
+.qbtn::before {
+  content:'';
+  position:absolute;
+  inset:0;
+  background:var(--accent-glow);
+  opacity:0;
+  transition:opacity 0.15s;
+}
+.qbtn:hover { border-color:var(--accent-dim); color:var(--accent); }
+.qbtn:hover::before { opacity:1; }
+
+/* ── Chat area ── */
+#chat {
+  flex:1;
+  overflow-y:auto;
+  padding:20px 16px;
+  display:flex;
+  flex-direction:column;
+  gap:14px;
+  scroll-behavior:smooth;
+  background:transparent;
+}
+#chat::-webkit-scrollbar{width:3px;}
+#chat::-webkit-scrollbar-thumb{background:var(--border2);}
+
+/* ── Messages ── */
+.msg {
+  display:flex;
+  gap:10px;
+  max-width:700px;
+  animation:rise 0.3s ease;
+}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+.msg.player{align-self:flex-end;flex-direction:row-reverse;}
+
+.mav {
+  width:30px; height:30px;
+  border-radius:2px;
+  display:flex; align-items:center; justify-content:center;
+  font-family:var(--font-head);
+  font-size:13px;
+  flex-shrink:0;
+  margin-top:2px;
+  border:1px solid var(--border2);
+}
+.npc .mav  {background:var(--muted2);color:var(--accent);border-color:var(--accent-dim);}
+.player .mav{background:var(--muted2);color:var(--muted);}
+
+.mbody{display:flex;flex-direction:column;gap:4px;}
+.msender{font-size:9px;text-transform:uppercase;letter-spacing:0.12em;color:var(--muted);}
+.npc .msender{color:var(--accent-dim);}
+
+.bubble {
+  padding:12px 15px;
+  border-radius:2px;
+  font-size:13px;
+  line-height:1.7;
+  max-width:520px;
+  position:relative;
+}
+.npc .bubble {
+  background:var(--card);
+  border:1px solid var(--border2);
+  border-left:2px solid var(--accent-dim);
+  color:var(--text);
+}
+.player .bubble {
+  background:#0a1a0d;
+  border:1px solid #1a3320;
+  border-right:2px solid var(--accent-dim);
+  color:#8de8a0;
+  text-align:right;
+}
+.bubble.quest  {border-left-color:var(--gold);background:#110e00;}
+.bubble.trade  {border-left-color:var(--accent);background:#071209;}
+.bubble.lore   {border-left-color:#334;background:#0a0a10;color:#8899aa;font-style:italic;}
+.bubble.error  {border-left-color:var(--danger);background:#120505;color:var(--danger);}
+
+.tag {
+  display:inline-block;
+  font-size:9px; padding:2px 7px;
+  border-radius:1px; margin-bottom:6px;
+  letter-spacing:0.1em; text-transform:uppercase;
+}
+.tag.quest {background:#1a1200;color:var(--gold);border:1px solid #2a1e00;}
+.tag.trade {background:#071209;color:var(--accent);border:1px solid var(--accent-dim);}
+.tag.lore  {background:#0d0d14;color:#6677aa;border:1px solid #222233;}
+
+/* inventory */
+.inv-grid {
+  display:grid;
+  grid-template-columns:repeat(2,1fr);
+  gap:6px;
+  margin-top:8px;
+}
+.inv-item {
+  background:#050d07;
+  border:1px solid var(--border2);
+  border-radius:2px;
+  padding:8px 10px;
+}
+.inv-name{font-size:11px;color:var(--text);margin-bottom:2px;}
+.inv-price{font-size:13px;color:var(--accent);font-weight:700;}
+.inv-qty{font-size:9px;color:var(--muted);margin-top:2px;}
+
+/* typing */
+.typing .bubble{display:flex;gap:5px;align-items:center;padding:14px 16px;}
+.dot{width:5px;height:5px;border-radius:50%;background:var(--accent-dim);animation:bl 1.3s infinite;}
+.dot:nth-child(2){animation-delay:.22s}.dot:nth-child(3){animation-delay:.44s}
+@keyframes bl{0%,80%,100%{opacity:.2;transform:scale(.7)}40%{opacity:1;transform:scale(1)}}
+
+/* ── Input bar ── */
+#input-bar {
+  padding:12px 16px;
+  border-top:1px solid var(--border);
+  background:rgba(8,12,10,0.97);
+  display:flex;
+  gap:10px;
+  align-items:flex-end;
+  flex-shrink:0;
+}
+
+#user-input {
+  flex:1;
+  background:#050d07;
+  border:1px solid var(--border2);
+  border-radius:2px;
+  padding:11px 14px;
+  color:var(--text);
+  font-family:var(--font-mono);
+  font-size:13px;
+  outline:none;
+  resize:none;
+  min-height:44px;
+  max-height:110px;
+  line-height:1.5;
+  transition:border-color 0.15s;
+}
+#user-input:focus{border-color:var(--accent-dim);box-shadow:0 0 0 1px rgba(57,255,122,0.1);}
+#user-input::placeholder{color:var(--muted);}
+
+#send-btn {
+  width:44px; height:44px;
+  border-radius:2px;
+  background:var(--accent-dim);
+  border:1px solid var(--accent-dim);
+  cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  transition:all 0.15s;
+  flex-shrink:0;
+}
+#send-btn:hover{background:var(--accent);box-shadow:0 0 12px rgba(57,255,122,0.3);}
+#send-btn:disabled{background:var(--muted2);border-color:var(--border2);cursor:not-allowed;box-shadow:none;}
+#send-btn svg{width:16px;height:16px;fill:#000;}
+
+/* ── Pending notice ── */
+#pending-notice {
+  display:none;
+  background:#0a0e0b;
+  border:1px solid var(--border2);
+  border-radius:2px;
+  padding:12px 16px;
+  margin:10px 16px;
+  font-size:12px;
+  color:var(--muted);
+  line-height:1.6;
+  flex-shrink:0;
+}
+#pending-notice a{color:var(--accent-dim);}
+#pending-notice.show{display:block;}
+#pending-notice code {
+  background:#050d07;
+  border:1px solid var(--border2);
+  border-radius:2px;
+  padding:2px 6px;
+  font-size:11px;
+  color:var(--accent);
+  display:block;
+  margin:6px 0;
+}
+
+@media(max-width:600px){
+  .npc-codename{font-size:26px;}
+  .header-portrait{width:68px;height:68px;}
+  canvas#portrait{width:68px;height:68px;}
+}
+</style>
+</head>
+<body>
+
+<!-- City skyline SVG -->
+<svg id="skyline" viewBox="0 0 1400 220" preserveAspectRatio="xMidYMax slice" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#080c0a"/>
+      <stop offset="100%" stop-color="#0d180f"/>
+    </linearGradient>
+    <linearGradient id="fog-grad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="rgba(57,255,122,0.0)"/>
+      <stop offset="100%" stop-color="rgba(57,255,122,0.04)"/>
+    </linearGradient>
+  </defs>
+  <!-- far buildings -->
+  <rect x="0" y="120" width="1400" height="100" fill="#080c0a"/>
+  <rect x="20" y="90" width="40" height="130" fill="#0a110c"/>
+  <rect x="70" y="70" width="55" height="150" fill="#0b130d"/>
+  <rect x="135" y="100" width="30" height="120" fill="#090e0b"/>
+  <rect x="175" y="55" width="70" height="165" fill="#0c150e"/>
+  <rect x="255" y="80" width="45" height="140" fill="#0a120c"/>
+  <rect x="310" y="40" width="90" height="180" fill="#0d160f"/>
+  <rect x="350" y="60" width="30" height="100" fill="#0e1810" opacity=".6"/>
+  <rect x="410" y="95" width="35" height="125" fill="#0a110c"/>
+  <rect x="455" y="50" width="80" height="170" fill="#0c150e"/>
+  <rect x="545" y="75" width="50" height="145" fill="#0b130d"/>
+  <rect x="605" y="30" width="100" height="190" fill="#0e1710"/>
+  <rect x="645" y="50" width="40" height="130" fill="#101a12" opacity=".5"/>
+  <rect x="715" y="85" width="40" height="135" fill="#090e0b"/>
+  <rect x="765" y="60" width="65" height="160" fill="#0c150e"/>
+  <rect x="840" y="45" width="85" height="175" fill="#0d160f"/>
+  <rect x="880" y="70" width="30" height="120" fill="#0e1810" opacity=".6"/>
+  <rect x="935" y="90" width="45" height="130" fill="#0b130d"/>
+  <rect x="990" y="55" width="70" height="165" fill="#0c150e"/>
+  <rect x="1070" y="75" width="50" height="145" fill="#090e0b"/>
+  <rect x="1130" y="35" width="95" height="185" fill="#0e1710"/>
+  <rect x="1170" y="60" width="35" height="120" fill="#101a12" opacity=".5"/>
+  <rect x="1235" y="80" width="55" height="140" fill="#0b130d"/>
+  <rect x="1300" y="50" width="80" height="170" fill="#0c150e"/>
+  <rect x="1390" y="95" width="30" height="125" fill="#090e0b"/>
+  <!-- window lights -->
+  <g fill="#39ff7a" opacity="0.25">
+    <rect x="185" y="70" width="4" height="4"/><rect x="195" y="80" width="4" height="4"/>
+    <rect x="320" y="55" width="4" height="4"/><rect x="335" y="65" width="4" height="4"/><rect x="350" y="50" width="4" height="4"/>
+    <rect x="465" y="60" width="4" height="4"/><rect x="480" y="75" width="4" height="4"/>
+    <rect x="615" y="45" width="4" height="4"/><rect x="630" y="38" width="4" height="4"/><rect x="645" y="55" width="4" height="4"/>
+    <rect x="775" y="70" width="4" height="4"/><rect x="790" y="62" width="4" height="4"/>
+    <rect x="850" y="55" width="4" height="4"/><rect x="865" y="48" width="4" height="4"/><rect x="880" y="60" width="4" height="4"/>
+    <rect x="1000" y="65" width="4" height="4"/><rect x="1015" y="58" width="4" height="4"/>
+    <rect x="1140" y="45" width="4" height="4"/><rect x="1155" y="52" width="4" height="4"/>
+  </g>
+  <g fill="#d4a843" opacity="0.2">
+    <rect x="205" y="88" width="4" height="4"/><rect x="340" y="72" width="4" height="4"/>
+    <rect x="490" y="68" width="4" height="4"/><rect x="660" y="42" width="4" height="4"/>
+    <rect x="800" y="78" width="4" height="4"/><rect x="895" y="65" width="4" height="4"/>
+    <rect x="1025" y="62" width="4" height="4"/><rect x="1165" y="48" width="4" height="4"/>
+  </g>
+  <!-- fog layer -->
+  <rect x="0" y="100" width="1400" height="120" fill="url(#fog-grad)"/>
+</svg>
+
+<canvas id="rain"></canvas>
+
+<div id="app">
+  <header>
+    <div class="header-portrait">
+      <canvas id="portrait" width="45" height="45"></canvas>
+      <div class="portrait-scan"></div>
+    </div>
+    <div class="header-info">
+      <div class="npc-codename">MARCUS</div>
+      <div class="npc-subtitle">Information Broker &amp; Fixer · Downtown City · Est. contact 2019</div>
+    </div>
+    <div class="header-stats">
+      <div class="rep-label">Reputation</div>
+      <div class="rep-value neutral" id="rep-value">NEUTRAL</div>
+      <div class="status-dot"></div>
+    </div>
+  </header>
+
+  <div id="quick-bar">
+    <button class="qbtn" onclick="qs('What are you selling?')">[ SHOP ]</button>
+    <button class="qbtn" onclick="qs('Got any work for me?')">[ QUESTS ]</button>
+    <button class="qbtn" onclick="qs('Tell me about District X')">[ DISTRICT X ]</button>
+    <button class="qbtn" onclick="qs('What do you know about the Council?')">[ THE COUNCIL ]</button>
+    <button class="qbtn" onclick="qs('Heard anything about a heist?')">[ HEIST ]</button>
+  </div>
+
+  <div id="pending-notice" class="show">
+    <strong style="color:var(--accent);">Setup required</strong> — this UI needs a backend to keep your API key secret.<br>
+    Follow the setup steps in the <code>README.md</code> to deploy the GitHub Actions proxy, then remove this notice.
+  </div>
+
+  <div id="chat"></div>
+
+  <div id="input-bar">
+    <textarea id="user-input" placeholder="Say something to Marcus..." rows="1"></textarea>
+    <button id="send-btn" onclick="sendMessage()">
+      <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2v7z"/></svg>
+    </button>
+  </div>
+</div>
+
+<script>
+/* ═══════════════════════════════════════
+   PIXEL PORTRAIT — Marcus
+═══════════════════════════════════════ */
+(function(){
+  const c = document.getElementById('portrait');
+  const ctx = c.getContext('2d');
+  const W = 45, H = 45;
+  // palette: 0=transparent, 1=dark bg, 2=skin, 3=skin-shadow, 4=hair, 5=jacket, 6=jacket-dark, 7=shirt, 8=eyes, 9=stubble, A=accent
+  const P = {
+    0:'rgba(0,0,0,0)',1:'#0d120f',2:'#c8906a',3:'#a06848',4:'#1a1208',
+    5:'#1a2a1e',6:'#0d1810',7:'#0f1f12',8:'#39ff7a',9:'#8a6040','A':'#39ff7a'
+  };
+  // 15x20 pixel grid (each cell = 3x3 px, centered in 45x45)
+  const G = [
+    '111111111111111',
+    '114444441111111',
+    '114422244411111',
+    '144222224441111',
+    '142232222441111',
+    '142289224481111',// eyes row
+    '142229222441111',
+    '142229994441111',// stubble
+    '144222224441111',
+    '111444444111111',
+    '115555755551111',// shoulders
+    '115557755551111',
+    '115557755551111',
+    '115555755551111',
+    '115555555551111',
+  ];
+  const CELL = 3;
+  const OX = Math.floor((W - 15*CELL)/2);
+  const OY = Math.floor((H - 15*CELL)/2);
+  G.forEach((row, ry) => {
+    [...row].forEach((ch, cx) => {
+      const color = P[ch] || 'rgba(0,0,0,0)';
+      ctx.fillStyle = color;
+      ctx.fillRect(OX + cx*CELL, OY + ry*CELL, CELL, CELL);
+    });
+  });
+  // green eye glow
+  ctx.fillStyle = 'rgba(57,255,122,0.15)';
+  ctx.fillRect(OX + 7*CELL, OY + 5*CELL, CELL*3, CELL*2);
+})();
+
+/* ═══════════════════════════════════════
+   RAIN EFFECT
+═══════════════════════════════════════ */
+(function(){
+  const canvas = document.getElementById('rain');
+  const ctx = canvas.getContext('2d');
+  let drops = [];
+  function resize(){
+    canvas.width  = window.innerWidth;
+    canvas.height = window.innerHeight;
+  }
+  resize();
+  window.addEventListener('resize', resize);
+  for(let i=0; i<120; i++){
+    drops.push({
+      x: Math.random()*window.innerWidth,
+      y: Math.random()*window.innerHeight,
+      len: Math.random()*15+8,
+      speed: Math.random()*4+3,
+      opacity: Math.random()*0.4+0.1
+    });
+  }
+  function draw(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    drops.forEach(d => {
+      ctx.strokeStyle = `rgba(57,255,122,${d.opacity})`;
+      ctx.lineWidth = 0.6;
+      ctx.beginPath();
+      ctx.moveTo(d.x, d.y);
+      ctx.lineTo(d.x - 1, d.y + d.len);
+      ctx.stroke();
+      d.y += d.speed;
+      d.x -= 0.5;
+      if(d.y > canvas.height){ d.y = -d.len; d.x = Math.random()*canvas.width; }
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+/* ═══════════════════════════════════════
+   NPC AGENT LOGIC
+═══════════════════════════════════════ */
+const BACKEND_URL = './api/chat'; // GitHub Actions proxy endpoint
+
+const SYSTEM = `You are Marcus, a streetwise information broker and fixer in a modern realistic open-world city.
+Personality: Cautious. Dry humour. Short punchy sentences. Never fully trusts anyone. Slight street slang.
+World state tracks player reputation (starts: neutral).
+Use tools naturally — show inventory when asked about buying, give quests when player seems ready, share lore in conversation, update reputation based on behaviour.
+Max 3 sentences per reply unless showing inventory or lore. Never break character. Never mention being an AI.`;
+
+const TOOLS = [
+  {name:"get_inventory",description:"Returns Marcus's tradeable inventory.",input_schema:{type:"object",properties:{},required:[]}},
+  {name:"trade_item",description:"Player buys an item.",input_schema:{type:"object",properties:{item_name:{type:"string"},quantity:{type:"integer"}},required:["item_name","quantity"]}},
+  {name:"give_quest",description:"Assign a mission to the player.",input_schema:{type:"object",properties:{quest_title:{type:"string"},quest_description:{type:"string"},reward:{type:"string"}},required:["quest_title","quest_description","reward"]}},
+  {name:"share_lore",description:"Share world lore.",input_schema:{type:"object",properties:{topic:{type:"string",enum:["district_x","the_council","heist"]}},required:["topic"]}},
+  {name:"update_reputation",description:"Update player reputation.",input_schema:{type:"object",properties:{new_reputation:{type:"string",enum:["hostile","neutral","trusted","ally"]}},required:["new_reputation"]}}
+];
+
+let inventory = {"Burner Phone":{qty:2,price:150},"Fake ID":{qty:1,price:800},"Encrypted USB":{qty:3,price:300},"City Map":{qty:5,price:20}};
+let reputation = "neutral";
+let history = [];
+let busy = false;
+
+function runTool(name, input){
+  if(name==="get_inventory"){
+    const items = Object.entries(inventory).filter(([,v])=>v.qty>0);
+    return "INV:"+JSON.stringify(items.map(([n,v])=>({name:n,qty:v.qty,price:v.price})));
+  }
+  if(name==="trade_item"){
+    const key = Object.keys(inventory).find(k=>k.toLowerCase()===input.item_name.toLowerCase());
+    if(!key) return `I don't carry that.`;
+    if(inventory[key].qty < input.quantity) return `Only ${inventory[key].qty} left.`;
+    const total = inventory[key].price * input.quantity;
+    inventory[key].qty -= input.quantity;
+    if(inventory[key].qty===0) delete inventory[key];
+    return `Deal. ${input.quantity}x ${key} — $${total}.`;
+  }
+  if(name==="give_quest"){
+    return "QUEST:"+JSON.stringify(input);
+  }
+  if(name==="share_lore"){
+    const L={district_x:"Nobody goes to District X after dark. Three crews fight over it. Bodies disappear.",the_council:"Seven people run this city. Nobody knows all seven names. I know two.",heist:"Diamond courier. Next Tuesday. Armored van. Route changes every time — or does it?"};
+    return "LORE:"+(L[input.topic]||"No intel.");
+  }
+  if(name==="update_reputation"){
+    reputation = input.new_reputation;
+    const rv = document.getElementById('rep-value');
+    rv.textContent = reputation.toUpperCase();
+    rv.className = 'rep-value '+reputation;
+    return "ok";
+  }
+  return "unknown tool";
+}
+
+async function callAPI(messages){
+  // Try backend proxy first, fall back to direct (for local testing)
+  try {
+    const r = await fetch(BACKEND_URL, {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({messages, system: SYSTEM, tools: TOOLS})
+    });
+    if(!r.ok) throw new Error('backend '+r.status);
+    return r.json();
+  } catch(e) {
+    // If no backend configured, show setup message
+    if(e.message.includes('backend') || e.message.includes('Failed to fetch')){
+      throw new Error('SETUP_NEEDED');
+    }
+    throw e;
+  }
+}
+
+async function agentLoop(userMsg){
+  history.push({role:"user",content:userMsg});
+  let invShown=false, questShown=false, loreShown=false;
+
+  while(true){
+    const data = await callAPI(history);
+    if(data.stop_reason==="end_turn"){
+      const text = (data.content.find(b=>b.type==="text")||{}).text||"...";
+      history.push({role:"assistant",content:data.content});
+      return text;
+    }
+    const results=[];
+    for(const b of data.content){
+      if(b.type==="tool_use"){
+        const raw = runTool(b.name, b.input);
+        if(raw.startsWith("INV:") && !invShown){
+          invShown=true;
+          removeTyping();
+          addNPC(JSON.parse(raw.slice(4)),"trade");
+          addTyping();
+        } else if(raw.startsWith("QUEST:") && !questShown){
+          questShown=true;
+          removeTyping();
+          addNPC(JSON.parse(raw.slice(6)),"quest");
+          addTyping();
+        } else if(raw.startsWith("LORE:") && !loreShown){
+          loreShown=true;
+          removeTyping();
+          addNPC(raw.slice(5),"lore");
+          addTyping();
+        }
+        results.push({type:"tool_result",tool_use_id:b.id,content:raw});
+      }
+    }
+    history.push({role:"assistant",content:data.content});
+    history.push({role:"user",content:results});
+  }
+}
+
+/* ── DOM helpers ── */
+function addNPC(content, type){
+  const chat = document.getElementById('chat');
+  const m = document.createElement('div'); m.className='msg npc';
+  const av = document.createElement('div'); av.className='mav'; av.textContent='M';
+  const body = document.createElement('div'); body.className='mbody';
+  const sender = document.createElement('div'); sender.className='msender'; sender.textContent='Marcus';
+  const bubble = document.createElement('div'); bubble.className='bubble '+(type||'');
+
+  if(type==='trade' && Array.isArray(content)){
+    const tag = document.createElement('div'); tag.className='tag trade'; tag.textContent='inventory';
+    bubble.appendChild(tag);
+    const grid = document.createElement('div'); grid.className='inv-grid';
+    content.forEach(item=>{
+      grid.innerHTML+=`<div class="inv-item"><div class="inv-name">${item.name}</div><div class="inv-price">$${item.price}</div><div class="inv-qty">${item.qty} in stock</div></div>`;
+    });
+    bubble.appendChild(grid);
+  } else if(type==='quest'){
+    const d = typeof content==='string'?JSON.parse(content):content;
+    const tag = document.createElement('div'); tag.className='tag quest'; tag.textContent='new mission';
+    bubble.appendChild(tag);
+    bubble.innerHTML+=`<strong style="color:var(--gold)">${d.quest_title}</strong><br>${d.quest_description}<br><span style="color:var(--accent);font-size:11px;">REWARD: ${d.reward}</span>`;
+  } else if(type==='lore'){
+    const tag = document.createElement('div'); tag.className='tag lore'; tag.textContent='intel';
+    bubble.appendChild(tag);
+    const p = document.createElement('p'); p.textContent=content; bubble.appendChild(p);
+  } else {
+    bubble.textContent = typeof content==='string'?content:'...';
+  }
+
+  body.appendChild(sender); body.appendChild(bubble);
+  m.appendChild(av); m.appendChild(body);
+  chat.appendChild(m);
+  chat.scrollTop=chat.scrollHeight;
+}
+
+function addPlayer(text){
+  const chat = document.getElementById('chat');
+  const m = document.createElement('div'); m.className='msg player';
+  const av = document.createElement('div'); av.className='mav'; av.textContent='Y';
+  const body = document.createElement('div'); body.className='mbody';
+  const sender = document.createElement('div'); sender.className='msender'; sender.textContent='You';
+  const bubble = document.createElement('div'); bubble.className='bubble'; bubble.textContent=text;
+  body.appendChild(sender); body.appendChild(bubble);
+  m.appendChild(av); m.appendChild(body);
+  chat.appendChild(m);
+  chat.scrollTop=chat.scrollHeight;
+}
+
+function addTyping(){
+  const chat = document.getElementById('chat');
+  const m = document.createElement('div'); m.className='msg npc typing'; m.id='typing';
+  m.innerHTML='<div class="mav">M</div><div class="mbody"><div class="msender">Marcus</div><div class="bubble"><span class="dot"></span><span class="dot"></span><span class="dot"></span></div></div>';
+  chat.appendChild(m); chat.scrollTop=chat.scrollHeight;
+}
+function removeTyping(){ const e=document.getElementById('typing'); if(e) e.remove(); }
+
+async function sendMessage(txt){
+  const inp = document.getElementById('user-input');
+  const text = (txt||inp.value).trim();
+  if(!text||busy) return;
+  inp.value=''; inp.style.height='auto';
+  busy=true; document.getElementById('send-btn').disabled=true;
+  addPlayer(text); addTyping();
+  try {
+    const reply = await agentLoop(text);
+    removeTyping(); addNPC(reply);
+  } catch(e){
+    removeTyping();
+    if(e.message==='SETUP_NEEDED'){
+      addNPC("Backend not configured yet. Follow the README to deploy the GitHub Actions proxy.","error");
+    } else {
+      addNPC("Something went wrong: "+e.message,"error");
+    }
+  }
+  busy=false; document.getElementById('send-btn').disabled=false;
+  document.getElementById('user-input').focus();
+}
+
+function qs(t){ sendMessage(t); }
+
+document.getElementById('user-input').addEventListener('input',function(){
+  this.style.height='auto';
+  this.style.height=Math.min(this.scrollHeight,110)+'px';
+});
+document.getElementById('user-input').addEventListener('keydown',function(e){
+  if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMessage();}
+});
+
+// Opening line via agentLoop
+window.addEventListener('load',async()=>{
+  addTyping();
+  try {
+    const reply = await agentLoop("Hey.");
+    removeTyping(); addNPC(reply);
+    document.getElementById('pending-notice').classList.remove('show');
+  } catch(e){
+    removeTyping();
+    addNPC("Backend not set up yet — follow the README to get started.","error");
+  }
+});
+</script>
+</body>
+</html>
